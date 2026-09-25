@@ -40,6 +40,22 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# A handful of teams where football-data.org's own `crest` field is known
+# to be stale (their upstream image hasn't caught up with a real-world
+# rebrand). Checked before falling back to their API's value. If you clear
+# data/cache.db and the crest is STILL wrong, that confirms it's genuinely
+# their data (not our own caching) — add an entry here to fix it.
+#
+# Find a team's id with:
+#   curl "https://api.football-data.org/v4/competitions/<CODE>/teams" \
+#     -H "X-Auth-Token: YOUR_KEY"
+# A Wikipedia/Wikimedia Commons club badge page is usually a safe, stable
+# source for the replacement URL.
+CREST_OVERRIDES: dict[int, str] = {
+    64: "",   # Liverpool FC — confirmed id; paste the corrected crest URL
+    # 0: "",  # Sporting CP — look up the id via the curl command above
+}
+
 
 @app.get("/health")
 def health() -> dict:
@@ -64,6 +80,9 @@ def list_teams(competition: str | None = None) -> list[TeamOut]:
 
 @app.get("/teams/{team_id}/crest")
 def get_team_crest(team_id: int) -> dict:
+    override = CREST_OVERRIDES.get(team_id)
+    if override:
+        return {"team_id": team_id, "crest_url": override}
     try:
         info = stats_api.get_team_info(team_id)
     except Exception as exc:
